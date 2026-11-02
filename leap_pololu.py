@@ -1,13 +1,26 @@
+# ==============================================================
+# Programa actualizado por Manuel Ovalle
+# Control teleoperado de robot Pololu 3Pi+ con Leap Motion
+# ==============================================================
+# Este script establece comunicacion con un robot movil Pololu 3Pi+
+# via WiFi y mapea los gestos de la mano detectados por el Leap Motion
+# a un esquema de traccion diferencial. El pitch controla la velocidad
+# longitudinal, el roll el giro, y el puno cerrado actua como parada de emergencia.
+# ==============================================================
+
 import time
+import os
 import leap
 from Pololu3Pi import Pololu3Pi
 
-# ==========================================
-# CONFIGURACIÓN
-# ==========================================
-ROBOT_IP = "192.168.50.115"
-MAX_SPEED = 90      # Velocidad máxima segura (0 a 100)
-DEADZONE = 15       # Zona muerta para que el robot no tiemble si tu mano no está perfectamente plana
+# Ruta de instalacion del SDK de Leap Motion
+os.environ["LEAPSDK_INSTALL_LOCATION"] = "D:\\LeapSDK"
+
+# Parametros de red y dinamica
+ROBOT_IP = "192.168.50.114"
+MAX_SPEED = 400
+DEADZONE_PITCH = 15
+DEADZONE_ROLL = 50
 
 class PololuController(leap.Listener):
     def __init__(self, bot):
@@ -16,56 +29,48 @@ class PololuController(leap.Listener):
         self.last_update = time.time()
 
     def on_tracking_event(self, event):
-        # ⚠️ IMPORTANTE: El Leap Motion lee a más de 100 FPS. 
-        # Si le mandamos 100 órdenes por segundo al ESP32 por Wi-Fi, lo vamos a trabar.
-        # Limitamos la transmisión a 10 veces por segundo (10 Hz).
+        # Limitar tasa de envio a periodos de 100 ms
         if time.time() - self.last_update < 0.1:
             return
         self.last_update = time.time()
 
-        # Si el sensor no detecta ninguna mano, el robot se detiene por seguridad
+        # Detener motores si no hay manos detectadas
         if not event.hands:
             self.bot.set_wheel_velocities(0, 0)
             return
 
         hand = event.hands[0]
 
-        # ------------------------------------------------
-        # 1. BOTÓN DE PÁNICO (Freno de emergencia)
-        # ------------------------------------------------
+        # Parada de emergencia por puno cerrado
         if hand.grab_strength > 0.8:
             self.bot.set_wheel_velocities(0, 0)
-            print("🛑 FRENO DE EMERGENCIA (Puño cerrado)")
+            print("FRENO DE EMERGENCIA (Puno cerrado)")
             return
 
-        # ------------------------------------------------
-        # 2. LECTURA Y CONTROL PROPORCIONAL
-        # ------------------------------------------------
-        # Extraemos los vectores crudos
-        pitch_raw = hand.palm.direction.y  # Dedos abajo es negativo
-        roll_raw = hand.palm.normal.x      # Muñeca a la derecha es positivo
+        # Lectura de inclinacion
+        pitch_raw = hand.palm.direction.y  
+        roll_raw = hand.palm.normal.x      
 
-        # Escalamos el rango del sensor (-0.5 a 0.5) al rango de los motores (-100 a 100)
-        # Multiplicamos por 200 para hacer la conversión directa
-        base_speed = -pitch_raw * 200
-        turn_speed = roll_raw * 200
+        base_speed = -pitch_raw * 500
+        turn_speed = -roll_raw * 140  
 
-        # Mezcla Diferencial
+        # Filtro de zona muerta
+        if abs(base_speed) < DEADZONE_PITCH:
+            base_speed = 0
+            
+        if abs(turn_speed) < DEADZONE_ROLL:
+            turn_speed = 0
+
+        # Cinematica diferencial
         v_left = base_speed + turn_speed
         v_right = base_speed - turn_speed
 
-        # Saturación (Clamp): Evitamos mandar velocidades mayores a MAX_SPEED
+        # Saturacion a limites de velocidad
         v_left = max(-MAX_SPEED, min(MAX_SPEED, v_left))
         v_right = max(-MAX_SPEED, min(MAX_SPEED, v_right))
 
-        # Zona Muerta: Si las velocidades calculadas son muy bajas, las forzamos a cero
-        if abs(v_left) < DEADZONE and abs(v_right) < DEADZONE:
-            v_left, v_right = 0, 0
-
-        # Enviamos la orden física al Pololu
+        # Envio de comandos a los motores
         self.bot.set_wheel_velocities(int(v_left), int(v_right))
-        
-        # Monitor para que veas qué está pasando
         print(f"Motores -> Izq: {int(v_left):4d} | Der: {int(v_right):4d}")
 
 def main():
@@ -73,20 +78,22 @@ def main():
     print("Iniciando Enlace: Leap Motion -> Pololu")
     print("========================================")
     
+    # Conexion con el robot
     bot = Pololu3Pi()
-    print(f"🔌 Conectando al Pololu en {ROBOT_IP}...")
+    print(f"Conectando al Pololu en {ROBOT_IP}...")
     bot.connect(ip=ROBOT_IP)
-    print("✅ Pololu conectado exitosamente.\n")
+    print("Pololu conectado exitosamente.\n")
 
+    # Inicializar listener del sensor
     my_listener = PololuController(bot)
     connection = leap.Connection()
     connection.add_listener(my_listener)
     
-    print("✋ Sensor Leap Motion activo.")
-    print("   - Inclina hacia adelante/atrás para avanzar/retroceder.")
-    print("   - Gira la muñeca para cruzar.")
-    print("   - ✊ CIERRA EL PUÑO para frenar.")
-    print("   - (Presiona Ctrl+C en esta ventana para salir)")
+    print("Sensor Leap Motion activo.")
+    print(" - Pitch: avanzar / retroceder")
+    print(" - Roll: giro diferencial")
+    print(" - Puno cerrado: freno")
+    print(" - Ctrl+C para finalizar")
 
     try:
         with connection.open():
@@ -95,8 +102,8 @@ def main():
     except KeyboardInterrupt:
         print("\nSaliendo del programa...")
     finally:
-        # Corte seguro de energía
-        print("Apagando motores y cerrando conexión...")
+        # Cierre seguro y detencion de actuadores
+        print("Apagando motores y cerrando conexion...")
         bot.force_stop()
         bot.disconnect()
 
