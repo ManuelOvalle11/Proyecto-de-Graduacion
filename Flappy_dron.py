@@ -1,3 +1,13 @@
+# ==============================================================
+# Programa desarrollado por Manuel Ovalle
+# Juego Flappy Leap con control gestual en Pygame
+# ==============================================================
+# Este script implementa un juego estilo Flappy Bird en 2D controlado
+# mediante el sensor Leap Motion para 1 o 2 jugadores. Mapea la posicion
+# espacial de las manos a coordenadas de pantalla e incluye gestion de
+# colisiones, puntaje y dificultad progresiva.
+# ==============================================================
+
 import pygame
 import leap
 import random
