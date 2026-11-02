@@ -1,4 +1,13 @@
-% Dron Racer con control por Leap Motion via UDP
+% ==============================================================
+% Programa desarrollado por Manuel Ovalle
+% Dron Racer con control por gestos via UDP
+% ==============================================================
+% Este script implementa un juego de esquivar obstaculos en 2D en MATLAB
+% basado en una maquina de estados finitos. Recibe datos UDP de Leap Motion;
+% la deteccion de puno cerrado inicia la partida y la inclinacion (roll)
+% conmuta de carril en tiempo real.
+% ==============================================================
+
 clc; clear; close all;
 
 % Configuracion del socket UDP
