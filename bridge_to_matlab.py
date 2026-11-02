@@ -1,5 +1,5 @@
 # ==============================================================
-# Programa desarrollado por Manuel Ovalle
+# Programa actualizado por Manuel Ovalle
 # Puente de comunicacion UDP para Leap Motion
 # ==============================================================
 # Este script captura los datos de seguimiento del sensor Leap Motion
