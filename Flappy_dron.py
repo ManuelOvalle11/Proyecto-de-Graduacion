@@ -3,26 +3,22 @@ import leap
 import random
 import sys
 
-# ==========================================
-# CONFIGURACIÓN DEL JUEGO
-# ==========================================
+# Configuracion general
 WIDTH, HEIGHT = 1000, 600
 FPS = 60
 
-# Colores
+# Paleta de colores
 SKY_BLUE = (135, 206, 235)
 PIPE_COLOR = (34, 139, 34)
 TEXT_COLOR = (255, 255, 255)
 ALERT_COLOR = (255, 50, 50)
 MENU_COLOR = (40, 40, 80)
-BIRD_COLOR = (255, 215, 0) # 🔥 Aquí está de vuelta el amarillo
+BIRD_COLOR = (255, 215, 0)
+P1_COLOR = (0, 150, 255)
+P2_COLOR = (255, 50, 50)
+DEAD_COLOR = (100, 100, 100)
 
-# Colores de los Jugadores
-P1_COLOR = (0, 150, 255)     # Azul (Izquierda)
-P2_COLOR = (255, 50, 50)     # Rojo (Derecha)
-DEAD_COLOR = (100, 100, 100) # Gris cuando chocan
-
-# Parámetros del Leap Motion
+# Limites de lectura en eje Y (Leap Motion)
 LEAP_Y_MIN = 100.0  
 LEAP_Y_MAX = 400.0  
 
@@ -38,29 +34,27 @@ class LeapController(leap.Listener):
                 'x': hand.palm.position.x,
                 'y': hand.palm.position.y
             })
-        # Ordenamos de izquierda a derecha
+        # Ordenar manos de izquierda a derecha en X
         self.hands_data = sorted(hands, key=lambda h: h['x'])
 
 def map_leap_to_screen(leap_x, leap_y, player_id):
-    # --- EJE Y (Igual para todos) ---
+    # Mapeo de altura Y a coordenadas de pantalla
     ratio_y = max(0.0, min(1.0, (leap_y - LEAP_Y_MIN) / (LEAP_Y_MAX - LEAP_Y_MIN)))
     screen_y = HEIGHT - (ratio_y * HEIGHT)
     
-    # --- EJE X INTELIGENTE (El truco para que sea justo) ---
-    if player_id == 1: # Jugador 1 (Mano Izquierda)
+    # Asignacion de posicion base segun jugador
+    if player_id == 1:
         base_screen_x = WIDTH // 3 - 30
-        base_leap_x = -100.0 # Su punto de reposo natural en el sensor
-    elif player_id == 2: # Jugador 2 (Mano Derecha)
+        base_leap_x = -100.0
+    elif player_id == 2:
         base_screen_x = WIDTH // 3 + 30
-        base_leap_x = 100.0 # Su punto de reposo natural en el sensor
-    else: # Un solo jugador (Mano en el centro)
+        base_leap_x = 100.0
+    else:
         base_screen_x = WIDTH // 3
         base_leap_x = 0.0
 
-    # Multiplicamos el desplazamiento por 1.5 para buena sensibilidad
+    # Desplazamiento horizontal escalado
     screen_x = base_screen_x + (leap_x - base_leap_x) * 1.5
-    
-    # Evitamos que se salgan de la pantalla
     screen_x = max(20, min(WIDTH - 20, screen_x))
     
     return screen_x, screen_y
@@ -75,6 +69,7 @@ def main():
     font_med = pygame.font.SysFont("Arial", 40, bold=True)
     font_big = pygame.font.SysFont("Arial", 55, bold=True)
 
+    # Conexion con Leap Motion
     listener = LeapController()
     connection = leap.Connection()
     connection.add_listener(listener)
@@ -82,13 +77,14 @@ def main():
     state = "MENU"
     mode = 1
 
-    # Variables de Juego
+    # Estado y posicion de los jugadores
     radius = 20
     p1_pos = [WIDTH // 3, HEIGHT // 2]
     p2_pos = [WIDTH // 3 + 30, HEIGHT // 2]
     p1_alive = False
     p2_alive = False
 
+    # Parametros de obstaculos
     pipe_width = 80
     pipe_gap = 220 
     base_velocity = 5.0
@@ -106,7 +102,7 @@ def main():
         score = 0
         pipes.clear()
         
-        # Posiciones iniciales ancladas
+        # Reiniciar posiciones segun modo de juego
         if selected_mode == 1:
             p1_pos = [WIDTH // 3, HEIGHT // 2]
         else:
@@ -121,11 +117,13 @@ def main():
 
     with connection.open():
         while True:
+            # Manejo de eventos de entrada y ventana
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
                 
+                # Seleccion de modo en menu
                 if state == "MENU":
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_1:
@@ -137,21 +135,25 @@ def main():
                             reset_game(mode)
                             state = "PLAYING"
 
+                # Reiniciar al menu tras perder
                 elif state == "GAMEOVER":
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_SPACE:
                             state = "MENU"
                             pygame.time.set_timer(SPAWNPIPE, 0)
 
+                # Generacion periodica de tubos
                 elif state == "PLAYING" and event.type == SPAWNPIPE:
                     if (mode == 1 and len(listener.hands_data) >= 1) or (mode == 2 and len(listener.hands_data) == 2):
                         pipe_height = random.randint(100, HEIGHT - 100 - pipe_gap)
                         pipes.append(pygame.Rect(WIDTH, pipe_height + pipe_gap, pipe_width, HEIGHT - pipe_height - pipe_gap)) 
                         pipes.append(pygame.Rect(WIDTH, 0, pipe_width, pipe_height)) 
 
+            # Logica de juego
             if state == "PLAYING":
                 num_hands = len(listener.hands_data)
                 
+                # Pausar si no se detectan las manos requeridas
                 is_paused = False
                 if mode == 1 and num_hands == 0:
                     is_paused = True
@@ -159,7 +161,7 @@ def main():
                     is_paused = True
 
                 if not is_paused:
-                    # --- ACTUALIZACIÓN EN 2D (X e Y) ---
+                    # Suavizado de movimiento de jugadores
                     if p1_alive and num_hands >= 1:
                         p_id = 1 if mode == 2 else 0
                         target_x, target_y = map_leap_to_screen(listener.hands_data[0]['x'], listener.hands_data[0]['y'], p_id)
@@ -171,6 +173,7 @@ def main():
                         p2_pos[0] += (target_x - p2_pos[0]) * 0.15
                         p2_pos[1] += (target_y - p2_pos[1]) * 0.15
 
+                    # Movimiento y eliminacion de obstaculos fuera de pantalla
                     for pipe in pipes:
                         pipe.x -= int(pipe_velocity)
                     
@@ -179,10 +182,12 @@ def main():
                         pipes.pop(0) 
                         score += 1
                         
+                        # Incremento progresivo de dificultad
                         pipe_velocity = min(16.0, pipe_velocity + 0.5)
                         spawn_time = max(500, spawn_time - 50)
                         pygame.time.set_timer(SPAWNPIPE, spawn_time)
 
+                    # Deteccion de colisiones (obstaculos y bordes)
                     if p1_alive:
                         p1_rect = pygame.Rect(p1_pos[0] - radius, p1_pos[1] - radius, radius*2, radius*2)
                         if any(p1_rect.colliderect(p) for p in pipes) or p1_pos[1] <= 0 or p1_pos[1] >= HEIGHT:
@@ -196,7 +201,7 @@ def main():
                     if not p1_alive and not p2_alive:
                         state = "GAMEOVER"
 
-            # --- DIBUJADO EN PANTALLA ---
+            # Renderizado
             if state == "MENU":
                 screen.fill(MENU_COLOR)
                 title = font_big.render("FLAPPY LEAP", True, BIRD_COLOR)
@@ -213,19 +218,23 @@ def main():
                 for pipe in pipes:
                     pygame.draw.rect(screen, PIPE_COLOR, pipe)
 
+                # Dibujar jugadores eliminados en la base
                 if mode == 2 and not p2_alive:
                     pygame.draw.circle(screen, DEAD_COLOR, (int(p2_pos[0]), HEIGHT - radius), radius)
                 if not p1_alive:
                     pygame.draw.circle(screen, DEAD_COLOR, (int(p1_pos[0]), HEIGHT - radius), radius)
 
+                # Dibujar jugadores activos
                 if mode == 2 and p2_alive:
                     pygame.draw.circle(screen, P2_COLOR, (int(p2_pos[0]), int(p2_pos[1])), radius)
                 if p1_alive:
                     pygame.draw.circle(screen, P1_COLOR, (int(p1_pos[0]), int(p1_pos[1])), radius)
 
+                # Marcador
                 score_text = font_small.render(f"Puntos: {score} | Vel: {pipe_velocity:.1f}", True, TEXT_COLOR)
                 screen.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, 10))
 
+                # Avisos de deteccion de manos
                 if state == "PLAYING":
                     if mode == 1 and len(listener.hands_data) == 0:
                         warn = font_med.render("PON TU MANO PARA INICIAR", True, ALERT_COLOR)
