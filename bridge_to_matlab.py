@@ -1,3 +1,12 @@
+# ==============================================================
+# Programa desarrollado por Manuel Ovalle
+# Puente de comunicacion UDP para Leap Motion
+# ==============================================================
+# Este script captura los datos de seguimiento del sensor Leap Motion
+# y transmite por UDP los estados de los dedos, la orientacion (pitch, roll)
+# y la altura de la mano a una tasa constante de 30 FPS.
+# ==============================================================
+
 import socket
 import time
 import math
